@@ -1,0 +1,28 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+
+# NeoForge / ModDev
+run/
+runs/
+runClient/
+runServer/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Локальные секреты и конфиги
+local.properties
+*.local.properties
