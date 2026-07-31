@@ -1,0 +1,8 @@
+Manifest-Version: 1.0
+Specification-Title: pe_wars
+Specification-Vendor: politempire
+Specification-Version: 1
+Implementation-Title: client-neoforge
+Implementation-Version: 1.0.0
+Implementation-Vendor: politempire
+

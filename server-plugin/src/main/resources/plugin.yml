@@ -1,0 +1,26 @@
+name: pe_wars
+main: ru.pewars.server.PeWarsPlugin
+version: ${version}
+api-version: '1.21'
+author: politempire
+description: Система рейдов и войн для Towny. Аддон к townymenu.
+softdepend:
+  - Towny
+  - Vault
+  - pe_townymenu
+commands:
+  pewar:
+    description: Меню войн Towny
+    usage: /pewar
+    permission: pewars.use
+    aliases: [pewars, pewarmenu]
+  peraid:
+    description: Меню рейдов Towny
+    usage: /peraid
+    permission: pewars.use
+    aliases: [peraids, peraidmenu]
+permissions:
+  pewars.use:
+    default: true
+  pewars.admin:
+    default: op

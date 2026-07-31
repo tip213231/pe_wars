@@ -1,0 +1,28 @@
+modLoader = "javafml"
+loaderVersion = "[4,)"
+license = "All Rights Reserved"
+
+[[mods]]
+modId = "pe_wars"
+version = "1.0.0"
+displayName = "PE Wars - Raids & Wars for Towny"
+authors = "politempire"
+description = '''
+Меню рейдов и войн для сервера PoliteEmpire.
+Система фазовых рейдов и войн, захват чанков, PvP-зоны.
+Работает вместе с серверным плагином pe_wars и Towny.
+'''
+
+[[dependencies.pe_wars]]
+modId = "neoforge"
+type = "required"
+versionRange = "[21.1,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[dependencies.pe_wars]]
+modId = "minecraft"
+type = "required"
+versionRange = "[1.21.1,1.21.2)"
+ordering = "NONE"
+side = "CLIENT"

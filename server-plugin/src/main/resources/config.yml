@@ -1,0 +1,368 @@
+settings:
+  debug: false
+  currency-symbol: "$"
+  # Клавиша открытия меню на клиенте (только для справки, реальный бинд в клиентском моде).
+  client-key: "H"
+
+economy:
+  # Цена рейда (п.2 ТЗ: 1000). Списывается с банка атакующего города.
+  raid-cost: 1000
+  # Цена войны (п.2 ТЗ: 5000). Списывается с банка атакующего города.
+  war-cost: 5000
+
+storage:
+  # Хранилище состояния (п.16 ТЗ): sqlite (по умолчанию) или mysql / mariadb.
+  # Сохраняются: активные войны/рейды, захваченные чанки, кулдауны, установленные флаги.
+  # Для mysql при наличии HikariCP в classpath автоматически используется пул соединений.
+  type: sqlite
+  mysql:
+    host: localhost
+    port: 3306
+    database: pe_wars
+    user: root
+    password: ""
+
+raid:
+  # Кулдаун после рейда между ЭТИМИ двумя городами, часы (п.2 ТЗ: 1 день = 24; п.13 упоминает 3 дня = 72).
+  cooldown-hours: 24
+  # Фаза подготовки рейда (минуты, п.2 ТЗ: 15).
+  preparation-minutes: 15
+  # Активная фаза рейда (минуты, п.2 ТЗ: 30).
+  active-minutes: 30
+  # Если в зоне рейда нет атакующих N секунд — рейд считается отбитым (п.10 ТЗ).
+  no-attackers-timeout-seconds: 60
+  # Минимум онлайн-игроков в городе-защитнике для объявления рейда (п.2 ТЗ: 4).
+  min-online: 4
+  # Атакующий может строить во время активного рейда (п.10 ТЗ).
+  allow-build: true
+  # Процент казны города-защитника, получаемый атакующими при победе (п.10 ТЗ: 50%).
+  win-bank-percent: 50
+  # Блоки, которые разрешено ломать атакующим при активном рейде.
+  # По ТЗ (п.10): дерево, доски, стекло, двери (кроме железных), люки (кроме железных).
+  breakable-blocks:
+    # Дерево (брёвна)
+    - OAK_LOG
+    - SPRUCE_LOG
+    - BIRCH_LOG
+    - JUNGLE_LOG
+    - ACACIA_LOG
+    - DARK_OAK_LOG
+    - MANGROVE_LOG
+    - CHERRY_LOG
+    - CRIMSON_STEM
+    - WARPED_STEM
+    - STRIPPED_OAK_LOG
+    - STRIPPED_SPRUCE_LOG
+    - STRIPPED_BIRCH_LOG
+    - STRIPPED_JUNGLE_LOG
+    - STRIPPED_ACACIA_LOG
+    - STRIPPED_DARK_OAK_LOG
+    - STRIPPED_MANGROVE_LOG
+    - STRIPPED_CHERRY_LOG
+    - OAK_WOOD
+    - SPRUCE_WOOD
+    - BIRCH_WOOD
+    - JUNGLE_WOOD
+    - ACACIA_WOOD
+    - DARK_OAK_WOOD
+    - MANGROVE_WOOD
+    - CHERRY_WOOD
+    # Доски
+    - OAK_PLANKS
+    - SPRUCE_PLANKS
+    - BIRCH_PLANKS
+    - JUNGLE_PLANKS
+    - ACACIA_PLANKS
+    - DARK_OAK_PLANKS
+    - MANGROVE_PLANKS
+    - CHERRY_PLANKS
+    - BAMBOO_PLANKS
+    - CRIMSON_PLANKS
+    - WARPED_PLANKS
+    # Двери (кроме железной)
+    - OAK_DOOR
+    - SPRUCE_DOOR
+    - BIRCH_DOOR
+    - JUNGLE_DOOR
+    - ACACIA_DOOR
+    - DARK_OAK_DOOR
+    - MANGROVE_DOOR
+    - CHERRY_DOOR
+    - BAMBOO_DOOR
+    - CRIMSON_DOOR
+    - WARPED_DOOR
+    # Люки (кроме железного)
+    - OAK_TRAPDOOR
+    - SPRUCE_TRAPDOOR
+    - BIRCH_TRAPDOOR
+    - JUNGLE_TRAPDOOR
+    - ACACIA_TRAPDOOR
+    - DARK_OAK_TRAPDOOR
+    - MANGROVE_TRAPDOOR
+    - CHERRY_TRAPDOOR
+    - BAMBOO_TRAPDOOR
+    - CRIMSON_TRAPDOOR
+    - WARPED_TRAPDOOR
+    # Калитки
+    - OAK_FENCE_GATE
+    - SPRUCE_FENCE_GATE
+    - BIRCH_FENCE_GATE
+    - JUNGLE_FENCE_GATE
+    - ACACIA_FENCE_GATE
+    - DARK_OAK_FENCE_GATE
+    - MANGROVE_FENCE_GATE
+    - CHERRY_FENCE_GATE
+    - BAMBOO_FENCE_GATE
+    - CRIMSON_FENCE_GATE
+    - WARPED_FENCE_GATE
+    # Стекло
+    - GLASS
+    - GLASS_PANE
+    - TINTED_GLASS
+    - WHITE_STAINED_GLASS
+    - ORANGE_STAINED_GLASS
+    - MAGENTA_STAINED_GLASS
+    - LIGHT_BLUE_STAINED_GLASS
+    - YELLOW_STAINED_GLASS
+    - LIME_STAINED_GLASS
+    - PINK_STAINED_GLASS
+    - GRAY_STAINED_GLASS
+    - LIGHT_GRAY_STAINED_GLASS
+    - CYAN_STAINED_GLASS
+    - PURPLE_STAINED_GLASS
+    - BLUE_STAINED_GLASS
+    - BROWN_STAINED_GLASS
+    - GREEN_STAINED_GLASS
+    - RED_STAINED_GLASS
+    - BLACK_STAINED_GLASS
+    - WHITE_STAINED_GLASS_PANE
+    - ORANGE_STAINED_GLASS_PANE
+    - MAGENTA_STAINED_GLASS_PANE
+    - LIGHT_BLUE_STAINED_GLASS_PANE
+    - YELLOW_STAINED_GLASS_PANE
+    - LIME_STAINED_GLASS_PANE
+    - PINK_STAINED_GLASS_PANE
+    - GRAY_STAINED_GLASS_PANE
+    - LIGHT_GRAY_STAINED_GLASS_PANE
+    - CYAN_STAINED_GLASS_PANE
+    - PURPLE_STAINED_GLASS_PANE
+    - BLUE_STAINED_GLASS_PANE
+    - BROWN_STAINED_GLASS_PANE
+    - GREEN_STAINED_GLASS_PANE
+    - RED_STAINED_GLASS_PANE
+    - BLACK_STAINED_GLASS_PANE
+
+war:
+  # Кулдаун после войны между ЭТИМИ двумя городами, часы (п.2/п.13 ТЗ: 7 дней = 168).
+  cooldown-hours: 168
+  # Фаза подготовки войны (минуты, п.2 ТЗ: 1 час = 60).
+  preparation-minutes: 60
+  # Активная фаза войны (минуты, п.2 ТЗ: 2 часа = 120).
+  active-minutes: 120
+  # Завершение войны, если атакующих нет в зоне города N минут.
+  no-attackers-timeout-minutes: 15
+  # Минимум онлайн-игроков в городе-защитнике для объявления войны (п.2 ТЗ: 3).
+  min-online: 3
+  # Процент чанков города для победы атакующих (п.2/п.8 ТЗ: 75).
+  victory-chunk-percent: 75
+  # Разрешить TNT и другие взрывы во время активной войны (п.2/п.11 ТЗ).
+  allow-explosions: true
+  # Разрешить строительство участникам во время активной войны (п.2/п.11 ТЗ).
+  allow-build: true
+  # Разрешить разрушение блоков участникам во время активной войны (п.2/п.11 ТЗ).
+  allow-break: true
+  # Игроки без нации в зоне войны получают эффект голода (п.4 ТЗ).
+  hunger-for-nationless: true
+  # УСТАРЕЛО (не используется при новой логике войны). Оставлено для обратной совместимости.
+  extra-breakable-blocks: []
+
+  # Контейнеры, ЗАЩИЩЁННЫЕ от разрушения во время войны.
+  # Атакующие НЕ могут ломать эти блоки даже в активной фазе войны.
+  # Поддерживаются namespaced-id модовых блоков (например, create:item_vault).
+  protected-containers:
+    - minecraft:chest
+    - minecraft:trapped_chest
+    - minecraft:barrel
+    - create:item_vault
+
+  # ДОПОЛНИТЕЛЬНЫЕ команды, запрещённые участникам во время АКТИВНОЙ фазы войны ИЛИ рейда (п.14 ТЗ).
+  # Базовый блок-лист зашит в код: /t delete, /t withdraw, /t toggle * и др. — его обойти нельзя.
+  blocked-commands-during-war:
+    - "t deposit"
+    - "town deposit"
+    - "n deposit"
+    - "nation deposit"
+    - "n withdraw"
+    - "nation withdraw"
+    - "t invite"
+    - "town invite"
+    - "t add"
+    - "town add"
+    - "t kick"
+    - "town kick"
+    - "t leave"
+    - "town leave"
+    - "n add"
+    - "nation add"
+    - "n kick"
+    - "nation kick"
+    - "t spawn"
+    - "town spawn"
+    - "res spawn"
+    - "tpa"
+    - "tpaccept"
+    - "tpdeny"
+    - "tp"
+    - "teleport"
+    - "rtp"
+    - "wild"
+    - "home"
+    - "spawn"
+    - "warp"
+    - "back"
+  # Запрет телепортации в мирные зоны/фермы/центральные чанки при войне.
+  block-spawn-teleports: true
+
+capture:
+  # Сколько секунд флаг захвата должен простоять, чтобы чанк был захвачен (1 мин = 60).
+  # Таймер идёт только когда на чанке нет защитников (п.5 ТЗ).
+  flag-seconds: 60
+  # Сколько секунд нужно просто стоять в чанке (без флага), чтобы его захватить (2 мин = 120).
+  no-flag-seconds: 120
+  # Сколько секунд защитники должны удерживать чанк без атакующих, чтобы вернуть его (п.6 ТЗ).
+  recapture-seconds: 120
+  # Сколько флагов нужно успешно захватить в ЦЕНТРАЛЬНОМ чанке (п.7 ТЗ: 2).
+  central-flags-required: 2
+  # Минимум атакующих в центральном чанке для захвата (п.2/п.7 ТЗ: 5).
+  central-min-attackers: 5
+  # Радиус (в блоках) вокруг флага, где запрещено размещать любые блоки (п.5 ТЗ).
+  no-blocks-radius: 3
+  # Рецепт крафта флага захвата (п.2 ТЗ). Форма 3x3, символы — ингредиенты ниже, пробел — пустая клетка.
+  recipe:
+    shape:
+      - "WGW"
+      - "WIW"
+      - " B "
+    ingredients:
+      W: RED_WOOL
+      G: GOLD_INGOT
+      I: IRON_INGOT
+      B: RED_BANNER
+
+containers:
+  # Контейнеры, разрешённые к разрушению при АКТИВНОМ рейде.
+  # Поддерживаются namespaced-id модовых блоков (например, create:item_vault).
+  # При разрушении содержимое выпадает атакующему как обычные предметы.
+  breakable:
+    - minecraft:chest
+    - minecraft:trapped_chest
+    - minecraft:barrel
+    - minecraft:shulker_box
+    - create:item_vault
+
+sounds:
+  # Звуки для участников войны/рейда (атакующие + защитники) при старте/завершении.
+  # Имена — валидные значения org.bukkit.Sound или кастомные ключи (например pe_wars:war_declared).
+  enabled: true
+  war-declared: "pe_wars:war_declared"
+  war-start: ENTITY_ENDER_DRAGON_GROWL
+  war-end: UI_TOAST_CHALLENGE_COMPLETE
+  raid-start: ENTITY_WITHER_SPAWN
+  raid-end: UI_TOAST_CHALLENGE_COMPLETE
+  volume: 0.6
+  pitch: 1.0
+
+chat:
+  prefix: "&8[&6⚔&8] &r"
+  war-declared: "&6⚔ &eВойна объявлена! &f{attacker} &e→ &f{defender}&e. Подготовка: &f{prep} &eмин."
+  war-started: "&6⚔ &lВойна началась! &r&f{attacker} &6атакует &f{defender}&6. Активная фаза {active} минут! PvP включён в обоих городах."
+  war-won-attackers: "&6⚔ &f{attacker} &eодержала победу над &f{defender}&e! Захвачено чанк��в: &f{chunks}&e."
+  war-decision-available: "&6⚑ &e{attacker} &6победил в войне против &e{defender}&6! Мэр победителей выбирает исход в меню войн (/t war): казна / захват города / смена мэра."
+  war-decision-none: "&cНет войны, ожидающей вашего решения."
+  war-decision-not-mayor: "&cИсход войны выбирает мэр города-победителя."
+  war-decision-treasury: "&6⚑ &e{attacker} &7забирает всю казну города &e{defender} &7(&6{amount} {currency}&7). Захваченные чанки возвращены городу."
+  war-decision-capture: "&4⚑ &e{attacker} &cполностью захватывает город &e{defender}&c! Вся территория ({chunks} чанков) перешла победителю, на месте центра создан аванпост «{defender}»."
+  war-decision-mayor: "&6⚑ Новым мэром города &e{defender} &7назначен &e{player} &7из города-победителя &e{attacker}&7. Захваченные чанки возвращены городу."
+  war-decision-mayor-usage: "&cУкажите ник игрока из вашего города: /pewar decide mayor <ник>"
+  war-decision-mayor-not-found: "&cИгрок {name} не найден в Towny."
+  war-decision-mayor-wrong-town: "&cИгрок {name} не состоит в городе {attacker}!"
+  war-decision-mayor-failed: "&cНе удалось назначить мэра. Попробуйте ещё раз или выберите другой исход."
+  war-decision-unknown: "&cНеизвестный исход. Доступно: treasury (казна), capture (захват), mayor (мэр)."
+  war-won-defenders: "&b⚔ &f{defender} &bотстояла свой город от &f{attacker}&b! Все чанки возвращены."
+  war-timeout: "&7⚔ Война &f{attacker} &7против &f{defender} &7завершена: атакующие покинули зону."
+  war-surrendered: "&6⚔ Город &f{town} &eподписал капитуляцию! Победитель: &f{winner}&e."
+  war-peace-offer: "&e⚔ Город &f{town} &eпредложил мирный договор городу &f{other}&e. Мэр может подписать: &f/pewar peace"
+  war-peace-already: "&cВаш город уже предложил мир. Ожидайте решения другой стороны."
+  war-peace-signed: "&a⚔ Подписан мирный договор между &f{attacker} &aи &f{defender}&a. Война завершена."
+  war-not-started-yet: "&cВойна ещё не началась (идёт подготовка). Используйте /pewar cancel."
+  raid-declared: "&6💥 &eРейд объявлен! &f{attacker} &e→ &f{defender}&e. Подготовка: &f{prep} &eмин."
+  raid-active: "&c🔥 Рейд активен! PvP включён в городе &f{town}&c. Атакующим разрешено ломать блоки из списка и строить."
+  raid-ended: "&7💥 Рейд &f{attacker} &7на &f{defender} &7завершён."
+  raid-defended: "&b💥 Рейд отбит! Город &f{defender} &bотстоял свою территорию от &f{attacker}&b."
+  raid-won-attackers: "&6💥 Рейд успешен! &f{attacker} &eполучает &f{amount}{currency} &eиз казны города &f{defender}&e."
+  raid-no-town: "&cНужно состоять в городе, чтобы объявить рейд."
+  raid-already-active: "&cРейд уже идёт — нельзя объявить второй."
+  raid-cannot-afford: "&cВ банке города не хватает монет для рейда. Нужно: &f{cost}&c."
+  raid-min-online: "&cВ городе-защитнике должно быть минимум &f{min}&c игроков онлайн. Сейчас: &f{online}&c."
+  war-no-town: "&cНужно состоять в городе и быть мэром, чтобы объявить войну."
+  war-already-active: "&cВойна уже идёт — нельзя объявить вторую."
+  war-cooldown-pair: "&cМежду городами &f{a} &cи &f{b} &cдействует кулдаун войны ещё &f{time}&c."
+  raid-cooldown-pair: "&cМежду городами &f{a} &cи &f{b} &cдействует кулдаун рейда ещё &f{time}&c."
+  war-cannot-afford: "&cВ банке города не хватает монет для войны. Нужно: &f{cost}&c."
+  war-min-online: "&cВ городе-защитнике должно быть минимум &f{min}&c игроков онлайн. Сейчас: &f{online}&c."
+  war-self-target: "&cНельзя объявить войну своему городу."
+  war-neutral-target: "&cГород &f{defender} &cнаходится под нейтралитетом — ему нельзя объявить войну."
+  raid-self-target: "&cНельзя рейдить свой город."
+  cmd-blocked-war: "&cВо время войны/рейда эта команда недоступна: &f{cmd}&c."
+  spawn-blocked-war: "&cВо время войны/рейда нельзя телепортироваться в этот регион."
+  break-blocked: "&cВо время активного рейда/войны этот блок ломать нельзя."
+  place-blocked: "&cВо время активного рейда/войны строить нельзя."
+  capture-flag-placed: "&6🚩 &f{attacker} &eпоставил флаг захвата в чанке города &f{town}&e! Защитите его &f{time}&e!"
+  capture-flag-placed-central: "&6🚩 &f{attacker} &eпоставил флаг в ЦЕНТРАЛЬНОМ чанке города &f{town}&e! (флаг {done}/{need})"
+  capture-flag-progress: "&eЗахват чанка: &f{percent}% &e(&f{time}&e осталось)"
+  capture-flag-success: "&c🚩 Чанк захвачен! &f{attacker} &cзахватил чанк у города &f{town}&c."
+  capture-flag-broken: "&b🚩 Флаг захвата уничтожен! Захват чанка города &f{town} &bотменён."
+  capture-flag-no-town: "&cФлаг захвата можно ставить только в чанке города во время активной войны."
+  capture-flag-wrong-side: "&cФлаг захвата может ставить только атакующий город."
+  capture-flag-cannot-break: "&cФлаг захвата могут ломать только участники войны!"
+  capture-flag-already-captured: "&eЭтот чанк уже захвачен."
+  capture-flag-one-active: "&cФлаг захвата уже установлен! Дождитесь его захвата или уничтожения."
+  capture-flag-near-block: "&cВозле флага захвата нельзя размещать блоки!"
+  capture-flag-not-frontline: "&cЗахват распространяется от границы города! Ставьте флаг на приграничный чанк или рядом с уже захваченным."
+  capture-flag-block-appeared: "&c🚩 Захват прерван: возле флага появился блок!"
+  capture-flag-paused: "&e🚩 Захват приостановлен: на чанке есть защитники!"
+  capture-central-need-attackers: "&cДля захвата центрального чанка в нём должно быть минимум &f{min}&c атакующих (сейчас: &f{current}&c)."
+  capture-central-flag-captured: "&6🚩 Флаг &f{done}&6/&f{need} &6в центральном чанке города &f{town} &6захвачен!"
+  capture-central-success: "&c🚩 Центральный чанк города &f{town} &cзахвачен! Победа &f{attacker}&c!"
+  recapture-success: "&b🛡 Защитники города &f{defender} &bвернули свой чанк у города &f{attacker}&b!"
+  recapture-progress: "&b🛡 Возврат чанка: &f{time}&b/&f{total} &bсек (атакующих на чанке быть не должно)"
+  recapture-paused: "&c🛡 Для возврата чанка на нём не должно быть атакующих!"
+  war-chunks-transferred: "&e🚩 Захваченные чанки (&f{chunks}&e) переходят городу &f{attacker}&e."
+  not-mayor: "&cТолько мэр города может сделать это."
+  town-not-found: "&cГород не найден: &f{name}&c."
+  reload: "&ape_wars перезагружен."
+  war-cancelled: "&7⚔ Война между &f{attacker} &7и &f{defender} &7была отменена."
+  war-not-active: "&cВаш город не участвует в активной войне."
+  war-cancel-no-permission: "&cУ вас нет прав отменить эту войну."
+  war-cancel-success: "&aВойна успешно отменена."
+  war-cancel-refund: "&aСтоимость войны (&f{cost}&a) возвращена в банк атакующего города."
+  war-no-homeblock: "&cУ города &f{name}&c нет homeblock — войну объявить нельзя."
+  war-raid-conflict: "&cНельзя объявить войну: один из городов уже участвует в рейде."
+  raid-war-conflict: "&cНельзя объявить рейд: один из городов уже участвует в войне."
+  raid-cancelled: "&7💥 Рейд &f{attacker} &7на &f{defender} &7отменён."
+  raid-not-active: "&cВаш город не участвует в активном рейде."
+  raid-cancel-no-permission: "&cУ вас нет прав отменить этот рейд."
+  raid-cancel-success: "&aРейд успешно отменён."
+  raid-cancel-refund: "&aСтоимость рейда (&f{cost}&a) возвращена в банк атакующего города."
+
+titles:
+  war-won-attackers-title: "&6Победа &f{attacker}&6!"
+  war-won-attackers-subtitle: "&eГород &f{defender} &eпотерпел поражение"
+  war-won-defenders-title: "&bПобеда &f{defender}&b!"
+  war-won-defenders-subtitle: "&eАтака города &f{attacker} &eотбита"
+  war-timeout-title: "&7Ничья"
+  war-timeout-subtitle: "&eВойна между &f{attacker} &eи &f{defender} &eзавершена"
+  war-cancelled-title: "&7Война отменена"
+  war-cancelled-subtitle: "&eМир восстановлен"
+  war-peace-title: "&aМирный договор"
+  war-peace-subtitle: "&eВойна между &f{attacker} &eи &f{defender} &eзавершена"

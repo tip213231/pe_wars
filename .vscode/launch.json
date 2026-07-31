@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "request": "launch",
+      "name": "client-neoforge - Client",
+      "presentation": {
+        "group": "Mod Development - client-neoforge",
+        "order": 0
+      },
+      "projectName": "client-neoforge",
+      "mainClass": "net.neoforged.devlaunch.Main",
+      "args": [
+        "@D:\\politempire_MODS\\pe_wars\\client-neoforge\\build\\moddev\\clientRunProgramArgs.txt"
+      ],
+      "vmArgs": [
+        "@D:\\politempire_MODS\\pe_wars\\client-neoforge\\build\\moddev\\clientRunVmArgs.txt",
+        "-Dfml.modFolders\u003dpe_wars%%D:\\politempire_MODS\\pe_wars\\client-neoforge\\bin\\main"
+      ],
+      "cwd": "${workspaceFolder}\\client-neoforge\\run",
+      "env": {},
+      "console": "internalConsole",
+      "shortenCommandLine": "none"
+    }
+  ]
+}

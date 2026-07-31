@@ -1,0 +1,8 @@
+{
+  "war_declared": {
+    "subtitle": "subtitles.pe_wars.war_declared",
+    "sounds": [
+      "pe_wars:war_declared"
+    ]
+  }
+}
