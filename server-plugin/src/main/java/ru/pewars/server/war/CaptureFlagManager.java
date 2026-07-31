@@ -45,6 +45,12 @@ import java.util.UUID;
  *  - возле флага запрещено ставить блоки — при появлении блока захват прекращается;
  *  - центральный чанк: N флагов подряд, минимум M атакующих в чанке — победа;
  *  - состояние флагов сохраняется в БД (п.16).
+ *
+ * ВАЖНО про hasFlag: захват бывает двух видов. Обычный (hasFlag=true) создаётся
+ * поставленным баннером. Безфлаговый (hasFlag=false) создаётся scanNoFlagCaptures()
+ * просто потому, что атакующий стоит в приграничном чанке — физического баннера
+ * в мире при этом НЕ СУЩЕСТВУЕТ. Любой код, который возвращает предмет флага
+ * или стирает блок, обязан проверять hasFlag, иначе получается дюп (п.4).
  */
 public final class CaptureFlagManager implements Listener {
     private static final String FLAG_KEY = "pe_wars_capture_flag";
@@ -303,13 +309,20 @@ public final class CaptureFlagManager implements Listener {
         }
 
         event.setCancelled(false);
-        event.setDropItems(false);
         removeHolograms(flag);
         activeFlags.remove(key);
-        // Возвращаем флаг как предмет.
-        if (loc.getWorld() != null) {
-            loc.getWorld().dropItemNaturally(loc.clone().add(0.5, 0.2, 0.5), createFlagItem(1));
+
+        // ФИКС (п.4, дюп): предмет возвращаем ТОЛЬКО если это настоящий флаг.
+        // У безфлагового захвата ключ — координаты НОГ игрока, поэтому сюда
+        // можно было попасть, сломав любой посторонний блок в этой точке:
+        // игрок получал бесплатный флаг и терял законный дроп из-за setDropItems(false).
+        if (flag.hasFlag) {
+            event.setDropItems(false);
+            if (loc.getWorld() != null) {
+                loc.getWorld().dropItemNaturally(loc.clone().add(0.5, 0.2, 0.5), createFlagItem(1));
+            }
         }
+
         Bukkit.broadcastMessage(color(config.chat("capture-flag-broken",
                 "town", war != null ? war.defenderTownName : "?")));
     }
@@ -327,19 +340,32 @@ public final class CaptureFlagManager implements Listener {
         stopCapture(near, "capture-flag-block-appeared");
     }
 
-    /** Прекращение захвата: флаг исчезает, предмет возвращается. */
+    /**
+     * Прекращение захвата: флаг исчезает, предмет возвращается.
+     *
+     * ФИКС (п.4, дюп): возврат предмета выполняется ТОЛЬКО если в мире реально
+     * стоял баннер. Безфлаговый захват физического флага не имеет — раньше
+     * достаточно было встать в приграничном чанке и кинуть под ноги песок,
+     * чтобы получить бесплатный флаг захвата, и так раз в секунду.
+     * Выдача предмета вложена в проверку типа блока: если баннер уже исчез
+     * (взрыв, поршень, выгрузка чанка), предмет не создаётся из воздуха.
+     */
     private void stopCapture(ActiveFlag flag, String chatPath) {
         activeFlags.remove(flag.key);
         removeHolograms(flag);
-        Block block = flag.location.getBlock();
-        Material t = block.getType();
-        if (t == Material.RED_BANNER || t == Material.RED_WALL_BANNER) {
-            block.setType(Material.AIR);
+
+        if (flag.hasFlag) {
+            Block block = flag.location.getBlock();
+            Material t = block.getType();
+            if (t == Material.RED_BANNER || t == Material.RED_WALL_BANNER) {
+                block.setType(Material.AIR);
+                if (flag.location.getWorld() != null) {
+                    flag.location.getWorld().dropItemNaturally(
+                            flag.location.clone().add(0.5, 0.2, 0.5), createFlagItem(1));
+                }
+            }
         }
-        if (flag.location.getWorld() != null) {
-            flag.location.getWorld().dropItemNaturally(
-                    flag.location.clone().add(0.5, 0.2, 0.5), createFlagItem(1));
-        }
+
         String msg = config.chat(chatPath);
         if (msg != null && !msg.isBlank()) {
             Bukkit.broadcastMessage(color(msg));
@@ -370,7 +396,7 @@ public final class CaptureFlagManager implements Listener {
 
             War war = wars.getWar(flag.warId);
             if (war == null || war.phase != WarPhase.ACTIVE) {
-                block.setType(Material.AIR);
+                if (flag.hasFlag) block.setType(Material.AIR);
                 removeHolograms(flag);
                 it.remove();
                 continue;
@@ -381,8 +407,11 @@ public final class CaptureFlagManager implements Listener {
 
             // П.5 ТЗ: во время захвата на чанке не должно быть защитников — иначе ПАУЗА.
             // П.7 ТЗ: для центрального чанка также нужно минимум N атакующих в чанке.
+            // ФИКС (п.3): безфлаговый захват держится присутствием атакующего.
+            // Раньше атакующий мог уйти, а таймер докручивался в пустом чанке.
             boolean paused = defenders > 0
-                    || (flag.central && attackers < config.centralMinAttackers);
+                    || (flag.central && attackers < config.centralMinAttackers)
+                    || (!flag.hasFlag && attackers < 1);
 
             if (paused) {
                 String reason;
@@ -390,7 +419,7 @@ public final class CaptureFlagManager implements Listener {
                     reason = color(config.chat("capture-flag-paused"));
                 } else {
                     reason = color(config.chat("capture-central-need-attackers",
-                            "min", String.valueOf(config.centralMinAttackers),
+                            "min", String.valueOf(Math.max(1, flag.central ? config.centralMinAttackers : 1)),
                             "current", String.valueOf(attackers)));
                 }
                 updateHologramTimer(flag, flag.remainingMs, reason);
@@ -425,10 +454,15 @@ public final class CaptureFlagManager implements Listener {
      * Захват чанка БЕЗ флага: атакующий, который просто стоит в валидном
      * приграничном чанке города, запускает таймер захвата (config.captureNoFlagSeconds).
      * Вызывается раз в секунду вместе с tick().
+     *
+     * ФИКС (п.3): действует тот же лимит, что и для поставленных флагов —
+     * один активный захват на войну. Раньше можно было пробежать по границе
+     * города, засеять десяток параллельных захватов и уйти.
      */
     public void scanNoFlagCaptures() {
         for (War war : wars.activeWars()) {
             if (war.phase != WarPhase.ACTIVE) continue;
+            if (hasActiveFlagForWar(war.id)) continue;
             for (Player p : Bukkit.getOnlinePlayers()) {
                 if (!isAttackerInWar(p, war)) continue;
                 Location loc = p.getLocation();
@@ -447,6 +481,8 @@ public final class CaptureFlagManager implements Listener {
                         config.captureNoFlagSeconds * 1000L, central, false);
                 activeFlags.put(key, flag);
                 spawnHolograms(flag, war);
+                // Один захват на войну — дальше по этой войне не сканируем.
+                break;
             }
         }
     }
@@ -693,6 +729,11 @@ public final class CaptureFlagManager implements Listener {
         /** Оставшееся время захвата (не тикает во время паузы, п.5/п.7 ТЗ). */
         long remainingMs;
         final boolean central;
+        /**
+         * true — захват от реально поставленного баннера;
+         * false — безфлаговый захват от присутствия атакующего, физического
+         * блока в мире НЕТ. Не выдавать предмет флага, если здесь false (п.4).
+         */
         final boolean hasFlag;
         final List<UUID> hologramIds = new ArrayList<>();
 

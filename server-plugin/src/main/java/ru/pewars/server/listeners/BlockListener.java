@@ -1,9 +1,11 @@
 package ru.pewars.server.listeners;
 
 import net.md_5.bungee.api.ChatColor;
+import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -16,6 +18,7 @@ import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.Cancellable;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -47,6 +50,12 @@ import ru.pewars.server.war.WarPhase;
  * Взрывы: в войне разрешены только при war.allow-explosions (п.11 ТЗ).
  */
 public final class BlockListener implements Listener {
+    /**
+     * Радиус (в квадрате) рассылки корректировки блока клиентам: 64 блока.
+     * Меньше — игроки видят фантомные дыры, больше — лишний трафик.
+     */
+    private static final double REFRESH_RADIUS_SQUARED = 64.0 * 64.0;
+
     private final org.bukkit.plugin.java.JavaPlugin plugin;
     private final Config config;
     private final TownyBridge towny;
@@ -202,16 +211,22 @@ public final class BlockListener implements Listener {
      * только отменяют событие взрыва в городе, но и ВЫЧИЩАЮТ blockList() до нашего
      * HIGHEST-обработчика. Снимаем копию списка блоков на LOWEST (до фильтров Towny)
      * и восстанавливаем её в активной войне/рейде.
+     *
+     * Копия снимается ТОЛЬКО в активной боевой зоне: иначе каждый крипер,
+     * гаст и взорвавшаяся кровать на всём сервере аллоцировали бы ArrayList
+     * со всеми затронутыми блоками.
      */
     private final Map<Object, List<Block>> explosionSnapshots = new WeakHashMap<>();
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     public void onEntityExplodeEarly(EntityExplodeEvent event) {
+        if (!inActiveBattleZone(event.getLocation())) return;
         explosionSnapshots.put(event, new ArrayList<>(event.blockList()));
     }
 
     @EventHandler(priority = EventPriority.LOWEST, ignoreCancelled = false)
     public void onBlockExplodeEarly(BlockExplodeEvent event) {
+        if (!inActiveBattleZone(event.getBlock().getLocation())) return;
         explosionSnapshots.put(event, new ArrayList<>(event.blockList()));
     }
 
@@ -223,6 +238,15 @@ public final class BlockListener implements Listener {
     @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onBlockExplode(BlockExplodeEvent event) {
         handleExplosion(event.getBlock().getLocation(), event.blockList(), event);
+    }
+
+    /** Быстрая проверка «точка внутри активной войны или рейда». */
+    private boolean inActiveBattleZone(Location loc) {
+        if (loc == null) return false;
+        Raid raid = raidAt(loc);
+        if (raid != null && raid.phase == RaidPhase.ACTIVE) return true;
+        War war = warAt(loc);
+        return war != null && war.phase == WarPhase.ACTIVE;
     }
 
     private void handleExplosion(Location loc, java.util.List<Block> blocks, Cancellable event) {
@@ -252,6 +276,10 @@ public final class BlockListener implements Listener {
             blocks.addAll(original);
         }
 
+        // Собираем все защищённые блоки и обновляем их ОДНОЙ задачей планировщика,
+        // а не плодим runTask на каждый блок взрыва (п.20).
+        List<Block> protectedBlocks = new ArrayList<>();
+
         Iterator<Block> it = blocks.iterator();
         while (it.hasNext()) {
             Block block = it.next();
@@ -271,9 +299,11 @@ public final class BlockListener implements Listener {
 
             if (!breakable) {
                 it.remove();
-                refreshBlock(block, null);
+                protectedBlocks.add(block);
             }
         }
+
+        refreshBlocks(protectedBlocks, null);
     }
 
     /**
@@ -305,25 +335,60 @@ public final class BlockListener implements Listener {
 
     private void refreshBlock(Block block, Player player) {
         if (block == null) return;
-        Location loc = block.getLocation();
-        org.bukkit.Bukkit.getScheduler().runTask(plugin, () -> {
-            block.getState().update(true, true);
-            if (player != null && player.isOnline()) {
-                player.sendBlockChange(loc, block.getBlockData());
-            } else if (loc.getWorld() != null) {
-                for (Player p : loc.getWorld().getPlayers()) {
-                    if (p.getLocation().distanceSquared(loc) <= 4096) {
-                        p.sendBlockChange(loc, block.getBlockData());
+        refreshBlocks(Collections.singletonList(block), player);
+    }
+
+    /**
+     * Возвращает клиентам реальное состояние блоков, которые мы защитили от разрушения
+     * (иначе у игрока останется фантомная дыра до перезахода чанка).
+     *
+     * Всё делается ОДНОЙ задачей планировщика и ОДНИМ обходом списка игроков мира:
+     * раньше крупный взрыв порождал сотни отдельных runTask, каждый из которых
+     * перебирал всех игроков мира (п.20).
+     */
+    private void refreshBlocks(List<Block> blocks, Player player) {
+        if (blocks == null || blocks.isEmpty()) return;
+        List<Block> snapshot = new ArrayList<>(blocks);
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            for (Block block : snapshot) {
+                block.getState().update(true, true);
+            }
+
+            if (player != null) {
+                if (!player.isOnline()) return;
+                for (Block block : snapshot) {
+                    player.sendBlockChange(block.getLocation(), block.getBlockData());
+                }
+                return;
+            }
+
+            World world = snapshot.get(0).getWorld();
+            if (world == null) return;
+            for (Player nearby : world.getPlayers()) {
+                Location playerLoc = nearby.getLocation();
+                for (Block block : snapshot) {
+                    if (!world.equals(block.getWorld())) continue;
+                    Location blockLoc = block.getLocation();
+                    if (playerLoc.distanceSquared(blockLoc) <= REFRESH_RADIUS_SQUARED) {
+                        nearby.sendBlockChange(blockLoc, block.getBlockData());
                     }
                 }
             }
         });
     }
 
+    /**
+     * Зона рейда — это ТОЛЬКО территория города-защитника.
+     * RaidManager индексирует рейд по обоим городам, поэтому без этой проверки
+     * город самих атакующих тоже считался бы зоной рейда (п.2).
+     */
     private Raid raidAt(Location loc) {
         Object town = towny.getTownAt(loc);
         if (town == null) return null;
-        return raids.getRaidByDefender(towny.townName(town));
+        String townName = towny.townName(town);
+        Raid raid = raids.getRaidByDefender(townName);
+        if (raid == null) return null;
+        return raid.defenderTownName.equalsIgnoreCase(townName) ? raid : null;
     }
 
     /** Зона войны: ВЕСЬ город-защитник и ВЕСЬ город-атакующий (включая все аванпосты). */

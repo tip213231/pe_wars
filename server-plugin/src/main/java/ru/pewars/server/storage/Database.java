@@ -4,6 +4,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import ru.pewars.server.Config;
 
 import java.io.File;
+import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -13,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Level;
 
 /**
  * Хранилище состояния (п.16 ТЗ): SQLite (по умолчанию) или MySQL/MariaDB.
@@ -24,6 +26,15 @@ import java.util.Map;
  * парные кулдауны и активные флаги захвата.
  */
 public final class Database {
+    /** Таймаут установки TCP-соединения с MySQL, мс. */
+    private static final int MYSQL_CONNECT_TIMEOUT_MS = 5_000;
+    /** Таймаут ожидания ответа от MySQL, мс. */
+    private static final int MYSQL_SOCKET_TIMEOUT_MS = 30_000;
+    /** Сколько SQLite ждёт освобождения блокировки перед SQLITE_BUSY, мс. */
+    private static final int SQLITE_BUSY_TIMEOUT_MS = 5_000;
+    /** Размер пула HikariCP. */
+    private static final int HIKARI_POOL_SIZE = 4;
+
     private final JavaPlugin plugin;
     private final Config config;
 
@@ -33,6 +44,8 @@ public final class Database {
     private Connection sqliteConn;
     /** HikariDataSource (через рефлексию) для MySQL, если доступен. */
     private Object hikari;
+    /** Закешированный HikariDataSource#getConnection, чтобы не искать метод на каждый вызов. */
+    private Method hikariGetConnection;
     private String mysqlUrl;
 
     public Database(JavaPlugin plugin, Config config) {
@@ -55,21 +68,26 @@ public final class Database {
                 }
                 try {
                     Class.forName("org.sqlite.JDBC");
-                } catch (ClassNotFoundException ignored) {
-                    // Драйвер обычно уже есть в Paper.
+                } catch (ClassNotFoundException e) {
+                    // Драйвер обычно уже есть в Paper — это не ошибка, но полезно видеть в отладке.
+                    plugin.getLogger().log(Level.FINE,
+                            "org.sqlite.JDBC не найден явно, полагаемся на драйвер сервера.", e);
                 }
                 sqliteConn = DriverManager.getConnection(
                         "jdbc:sqlite:" + new File(folder, "data.db").getAbsolutePath());
+                applySqlitePragmas(sqliteConn);
             } else {
-                mysqlUrl = "jdbc:mysql://" + config.mysqlHost + ":" + config.mysqlPort + "/"
-                        + config.mysqlDatabase + "?useSSL=false&autoReconnect=true&characterEncoding=utf8";
+                mysqlUrl = buildMysqlUrl();
                 hikari = tryCreateHikari(mysqlUrl);
-                if (hikari == null) {
+                if (hikari != null) {
+                    hikariGetConnection = hikari.getClass().getMethod("getConnection");
+                } else {
                     // Проверочное соединение без пула.
                     try (Connection test = DriverManager.getConnection(mysqlUrl, config.mysqlUser, config.mysqlPassword)) {
                         if (!test.isValid(3)) throw new IllegalStateException("MySQL connection is not valid");
                     }
-                    plugin.getLogger().info("HikariCP не найден в classpath — используется DriverManager.");
+                    plugin.getLogger().info("HikariCP не найден в classpath — используется DriverManager. "
+                            + "Для продакшена рекомендуется добавить HikariCP: без пула каждое обращение открывает новое соединение.");
                 }
             }
             createTables();
@@ -77,9 +95,37 @@ public final class Database {
             plugin.getLogger().info("Хранилище готово: " + (sqlite ? "SQLite" : "MySQL" + (hikari != null ? " (HikariCP)" : "")));
         } catch (Throwable e) {
             ready = false;
-            plugin.getLogger().warning("Не удалось инициализировать хранилище (" + config.storageType
-                    + "): " + e.getMessage() + ". Состояние не будет переживать рестарт.");
+            plugin.getLogger().log(Level.WARNING, "Не удалось инициализировать хранилище (" + config.storageType
+                    + "). Состояние не будет переживать рестарт.", e);
         }
+    }
+
+    /**
+     * WAL сильно снижает время блокировки при записи, synchronous=NORMAL убирает
+     * fsync на каждую транзакцию, busy_timeout избавляет от мгновенных SQLITE_BUSY.
+     */
+    private void applySqlitePragmas(Connection conn) {
+        try (Statement st = conn.createStatement()) {
+            st.execute("PRAGMA journal_mode=WAL");
+            st.execute("PRAGMA synchronous=NORMAL");
+            st.execute("PRAGMA busy_timeout=" + SQLITE_BUSY_TIMEOUT_MS);
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.FINE, "Не удалось применить PRAGMA для SQLite.", e);
+        }
+    }
+
+    /**
+     * TODO: useSSL стоит вынести в config.yml (storage.mysql.use-ssl) вместе с остальными
+     * параметрами подключения — сейчас зашито для совместимости с текущим Config.
+     */
+    private String buildMysqlUrl() {
+        return "jdbc:mysql://" + config.mysqlHost + ":" + config.mysqlPort + "/"
+                + config.mysqlDatabase
+                + "?useSSL=false"
+                + "&autoReconnect=true"
+                + "&characterEncoding=utf8"
+                + "&connectTimeout=" + MYSQL_CONNECT_TIMEOUT_MS
+                + "&socketTimeout=" + MYSQL_SOCKET_TIMEOUT_MS;
     }
 
     private Object tryCreateHikari(String jdbcUrl) {
@@ -90,9 +136,17 @@ public final class Database {
             cfgClass.getMethod("setJdbcUrl", String.class).invoke(cfg, jdbcUrl);
             cfgClass.getMethod("setUsername", String.class).invoke(cfg, config.mysqlUser);
             cfgClass.getMethod("setPassword", String.class).invoke(cfg, config.mysqlPassword);
-            cfgClass.getMethod("setMaximumPoolSize", int.class).invoke(cfg, 4);
+            cfgClass.getMethod("setMaximumPoolSize", int.class).invoke(cfg, HIKARI_POOL_SIZE);
+            cfgClass.getMethod("setConnectionTimeout", long.class).invoke(cfg, (long) MYSQL_CONNECT_TIMEOUT_MS);
+            cfgClass.getMethod("setPoolName", String.class).invoke(cfg, "pe_wars");
             return dsClass.getConstructor(cfgClass).newInstance(cfg);
+        } catch (ClassNotFoundException e) {
+            // HikariCP просто отсутствует — штатная ситуация, не шумим в консоль.
+            plugin.getLogger().log(Level.FINE, "HikariCP отсутствует в classpath.", e);
+            return null;
         } catch (Throwable e) {
+            plugin.getLogger().log(Level.WARNING,
+                    "HikariCP найден, но пул создать не удалось — откат на DriverManager.", e);
             return null;
         }
     }
@@ -102,11 +156,12 @@ public final class Database {
             if (sqliteConn == null || sqliteConn.isClosed()) {
                 sqliteConn = DriverManager.getConnection(
                         "jdbc:sqlite:" + new File(plugin.getDataFolder(), "data.db").getAbsolutePath());
+                applySqlitePragmas(sqliteConn);
             }
             return sqliteConn;
         }
-        if (hikari != null) {
-            return (Connection) hikari.getClass().getMethod("getConnection").invoke(hikari);
+        if (hikari != null && hikariGetConnection != null) {
+            return (Connection) hikariGetConnection.invoke(hikari);
         }
         return DriverManager.getConnection(mysqlUrl, config.mysqlUser, config.mysqlPassword);
     }
@@ -116,7 +171,8 @@ public final class Database {
         if (sqlite || conn == null) return;
         try {
             conn.close();
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.FINE, "Не удалось закрыть соединение с БД.", e);
         }
     }
 
@@ -154,10 +210,13 @@ public final class Database {
                                      List<FlagRow> flags) {
         if (!ready) return;
         Connection conn = null;
+        boolean oldAutoCommit = true;
+        boolean autoCommitChanged = false;
         try {
             conn = connection();
-            boolean oldAutoCommit = conn.getAutoCommit();
+            oldAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
+            autoCommitChanged = true;
             try (Statement st = conn.createStatement()) {
                 st.executeUpdate("DELETE FROM pw_wars");
                 st.executeUpdate("DELETE FROM pw_raids");
@@ -233,14 +292,22 @@ public final class Database {
                 ps.executeBatch();
             }
             conn.commit();
-            conn.setAutoCommit(oldAutoCommit);
         } catch (Throwable e) {
-            plugin.getLogger().warning("Ошибка сохранения состояния: " + e.getMessage());
+            plugin.getLogger().log(Level.WARNING, "Ошибка сохранения состояния.", e);
             try {
                 if (conn != null) conn.rollback();
-            } catch (Exception ignored) {
+            } catch (Exception rollbackError) {
+                plugin.getLogger().log(Level.FINE, "Откат транзакции не удался.", rollbackError);
             }
         } finally {
+            // Критично: без этого SQLite-соединение навсегда остаётся в ручном коммите.
+            if (conn != null && autoCommitChanged) {
+                try {
+                    conn.setAutoCommit(oldAutoCommit);
+                } catch (Exception e) {
+                    plugin.getLogger().log(Level.WARNING, "Не удалось восстановить autoCommit.", e);
+                }
+            }
             release(conn);
         }
     }
@@ -313,7 +380,7 @@ public final class Database {
                 }
             }
         } catch (Throwable e) {
-            plugin.getLogger().warning("Ошибка загрузки состояния: " + e.getMessage());
+            plugin.getLogger().log(Level.WARNING, "Ошибка загрузки состояния.", e);
         } finally {
             release(conn);
         }
@@ -323,12 +390,14 @@ public final class Database {
     public void close() {
         try {
             if (sqliteConn != null && !sqliteConn.isClosed()) sqliteConn.close();
-        } catch (Exception ignored) {
+        } catch (Exception e) {
+            plugin.getLogger().log(Level.FINE, "Не удалось закрыть SQLite-соединение.", e);
         }
         if (hikari != null) {
             try {
                 hikari.getClass().getMethod("close").invoke(hikari);
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                plugin.getLogger().log(Level.FINE, "Не удалось закрыть пул HikariCP.", e);
             }
         }
     }

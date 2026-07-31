@@ -77,6 +77,12 @@ public final class Config {
     public String mysqlDatabase = "pe_wars";
     public String mysqlUser = "root";
     public String mysqlPassword = "";
+    /**
+     * Шифрование соединения с MySQL. Раньше useSSL=false был зашит в JDBC URL,
+     * что означало передачу пароля и данных по сети в открытом виде без
+     * возможности это изменить. Включайте, если БД не на localhost.
+     */
+    public boolean mysqlUseSsl;
 
     // звуки при старте/конце войны и рейда (для участников обеих сторон)
     public boolean soundsEnabled;
@@ -152,6 +158,7 @@ public final class Config {
         this.mysqlDatabase = c.getString("storage.mysql.database", "pe_wars");
         this.mysqlUser = c.getString("storage.mysql.user", "root");
         this.mysqlPassword = c.getString("storage.mysql.password", "");
+        this.mysqlUseSsl = c.getBoolean("storage.mysql.use-ssl", false);
 
         this.soundsEnabled = c.getBoolean("sounds.enabled", true);
         this.warDeclaredSound = c.getString("sounds.war-declared", "pe_wars:war_declared");

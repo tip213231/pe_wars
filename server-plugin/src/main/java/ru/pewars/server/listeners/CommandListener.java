@@ -47,16 +47,21 @@ public final class CommandListener implements Listener {
     @EventHandler(priority = EventPriority.LOWEST)
     public void onCommand(PlayerCommandPreprocessEvent event) {
         String message = event.getMessage().trim();
+        if (message.isEmpty()) return;
         Player player = event.getPlayer();
 
+        // Нормализуем ОДИН раз и переиспользуем для всех проверок.
+        String normalized = Config.normalizeCommand(message);
+
         // Перехват открытия меню войн/рейдов.
-        String lower = Config.normalizeCommand(message);
-        if (lower.equals("t war") || lower.equals("town war") || lower.equals("t война") || lower.equals("town война")) {
+        if (normalized.equals("t war") || normalized.equals("town war")
+                || normalized.equals("t война") || normalized.equals("town война")) {
             event.setCancelled(true);
             player.sendMessage(StateSerializer.WAR_MARKER + serializer.buildWar(player));
             return;
         }
-        if (lower.equals("t raid") || lower.equals("town raid") || lower.equals("t рейд") || lower.equals("town рейд")) {
+        if (normalized.equals("t raid") || normalized.equals("town raid")
+                || normalized.equals("t рейд") || normalized.equals("town рейд")) {
             event.setCancelled(true);
             player.sendMessage(StateSerializer.RAID_MARKER + serializer.buildRaid(player));
             return;
@@ -64,19 +69,31 @@ public final class CommandListener implements Listener {
 
         // П.14 ТЗ: блокировка критических команд для участников АКТИВНОЙ фазы войны ИЛИ рейда.
         ActiveConflict conflict = getActiveConflictForPlayer(player);
-        if (conflict != null) {
-            String normalized = Config.normalizeCommand(message);
-            boolean inTerritory = isPlayerInConflictTerritory(player, conflict);
+        if (conflict == null) return;
 
-            if (inTerritory && (isBlockedCommand(normalized) || isBlockedSpawnTeleport(normalized))) {
-                event.setCancelled(true);
-                player.sendMessage(color(config.chat("spawn-blocked-war")));
-            } else if (isBlockedCommand(normalized)) {
-                event.setCancelled(true);
-                String cmd = message.startsWith("/") ? message.substring(1).split(" ")[0] : message.split(" ")[0];
-                player.sendMessage(color(config.chat("cmd-blocked-war", "cmd", cmd)));
-            }
+        // ФИКС (п.27): раньше любая заблокированная команда, введённая на территории
+        // конфликта, отвечала сообщением про телепорт на спавн. Теперь каждый
+        // случай получает своё сообщение.
+        if (isBlockedCommand(normalized)) {
+            event.setCancelled(true);
+            player.sendMessage(color(config.chat("cmd-blocked-war", "cmd", commandLabel(message))));
+            return;
         }
+
+        // Телепорты запрещены только НА территории конфликта (чтобы нельзя было
+        // сбежать из боя). Проверку территории делаем лениво — только если команда
+        // вообще похожа на телепорт, а не на каждую команду игрока.
+        if (isBlockedSpawnTeleport(normalized) && isPlayerInConflictTerritory(player, conflict)) {
+            event.setCancelled(true);
+            player.sendMessage(color(config.chat("spawn-blocked-war")));
+        }
+    }
+
+    /** Имя команды без ведущего слеша и аргументов — для подстановки в сообщение. */
+    private String commandLabel(String message) {
+        String raw = message.startsWith("/") ? message.substring(1) : message;
+        int space = raw.indexOf(' ');
+        return space >= 0 ? raw.substring(0, space) : raw;
     }
 
     /** Активный конфликт игрока: война или рейд в АКТИВНОЙ фазе. */
@@ -174,18 +191,23 @@ public final class CommandListener implements Listener {
     /** Телепорт на спавн города/резиденции или команды побега, запрещённые при конфликте? */
     private boolean isBlockedSpawnTeleport(String normalized) {
         if (!config.blockSpawnTeleports) return false;
-        return normalized.equals("t spawn") || normalized.startsWith("t spawn ")
-                || normalized.equals("town spawn") || normalized.startsWith("town spawn ")
-                || normalized.equals("res spawn") || normalized.startsWith("res spawn ")
-                || normalized.equals("tpa") || normalized.startsWith("tpa ")
-                || normalized.equals("tpaccept") || normalized.startsWith("tpaccept ")
-                || normalized.equals("tpdeny") || normalized.startsWith("tpdeny ")
-                || normalized.equals("rtp") || normalized.startsWith("rtp ")
-                || normalized.equals("wild") || normalized.startsWith("wild ")
-                || normalized.equals("home") || normalized.startsWith("home ")
-                || normalized.equals("spawn") || normalized.startsWith("spawn ")
-                || normalized.equals("warp") || normalized.startsWith("warp ")
-                || normalized.equals("back") || normalized.startsWith("back ");
+        return matches(normalized, "t spawn")
+                || matches(normalized, "town spawn")
+                || matches(normalized, "res spawn")
+                || matches(normalized, "tpa")
+                || matches(normalized, "tpaccept")
+                || matches(normalized, "tpdeny")
+                || matches(normalized, "rtp")
+                || matches(normalized, "wild")
+                || matches(normalized, "home")
+                || matches(normalized, "spawn")
+                || matches(normalized, "warp")
+                || matches(normalized, "back");
+    }
+
+    /** Точное совпадение команды или команда с аргументами. */
+    private boolean matches(String normalized, String command) {
+        return normalized.equals(command) || normalized.startsWith(command + " ");
     }
 
     /** Находится ли игрок на территории одного из городов конфликта (включая аванпосты). */
@@ -193,6 +215,7 @@ public final class CommandListener implements Listener {
         Object townAt = towny.getTownAt(player.getLocation());
         if (townAt == null) return false;
         String name = towny.townName(townAt);
+        if (name == null) return false;
         return name.equalsIgnoreCase(conflict.defenderTownName())
                 || name.equalsIgnoreCase(conflict.attackerTownName());
     }

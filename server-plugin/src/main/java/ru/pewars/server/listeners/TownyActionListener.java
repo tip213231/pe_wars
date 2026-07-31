@@ -1,7 +1,10 @@
 package ru.pewars.server.listeners;
 
 import java.lang.reflect.Method;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Consumer;
+import java.util.logging.Level;
 import org.bukkit.Location;
 import org.bukkit.entity.Player;
 import org.bukkit.event.Cancellable;
@@ -40,12 +43,30 @@ import ru.pewars.server.war.WarPhase;
  * Классы Towny недоступны на компиляции (вся интеграция через рефлексию),
  * поэтому слушатели регистрируются динамически: Class.forName + registerEvent.
  * Если версия Towny не содержит какое-то событие — оно просто пропускается.
+ *
+ * ПРОИЗВОДИТЕЛЬНОСТЬ: эти обработчики вызываются на каждое действие с блоком
+ * НА ВСЁМ СЕРВЕРЕ, поэтому результаты поиска методов через рефлексию
+ * кешируются (включая отрицательный результат).
  */
 public final class TownyActionListener implements Listener {
+    /** Маркер «метод точно отсутствует» — ConcurrentHashMap не умеет хранить null. */
+    private static final Method NO_METHOD;
+
+    static {
+        try {
+            NO_METHOD = Object.class.getMethod("hashCode");
+        } catch (NoSuchMethodException e) {
+            throw new ExceptionInInitializerError(e);
+        }
+    }
+
     private final JavaPlugin plugin;
     private final TownyBridge towny;
     private final WarManager wars;
     private final RaidManager raids;
+
+    /** Кеш разрешённых методов: "<класс события>#<имя1,имя2>" -> Method или NO_METHOD. */
+    private final Map<String, Method> methodCache = new ConcurrentHashMap<>();
 
     public TownyActionListener(JavaPlugin plugin, TownyBridge towny, WarManager wars, RaidManager raids) {
         this.plugin = plugin;
@@ -74,8 +95,11 @@ public final class TownyActionListener implements Listener {
                 if (cls.isInstance(event)) {
                     try {
                         handler.accept(event);
-                    } catch (Throwable ignored) {
-                        // Никогда не ломаем обработку событий Towny из-за рефлексии.
+                    } catch (Throwable e) {
+                        // Никогда не ломаем обработку событий Towny из-за рефлексии,
+                        // но и не глотаем ошибку молча.
+                        plugin.getLogger().log(Level.FINE,
+                                "Ошибка в обработчике события Towny " + className, e);
                     }
                 }
             };
@@ -151,18 +175,36 @@ public final class TownyActionListener implements Listener {
 
     // ===================== Helpers =====================
 
-    /** Вызывает первый существующий метод без аргументов из списка имён. */
+    /**
+     * Вызывает первый существующий метод без аргументов из списка имён.
+     * Результат поиска кешируется: класс события у конкретной версии Towny не меняется
+     * в рантайме, а без кеша мы делали getMethod (и ловили исключения) на каждое
+     * событие с блоком на всём сервере.
+     */
     private Object call(Object target, String... methodNames) {
-        for (String name : methodNames) {
-            try {
-                Method m = target.getClass().getMethod(name);
-                m.setAccessible(true);
-                return m.invoke(target);
-            } catch (Throwable ignored) {
-                // Пробуем следующее имя — разные версии Towny.
+        Class<?> targetClass = target.getClass();
+        String cacheKey = targetClass.getName() + "#" + String.join(",", methodNames);
+
+        Method resolved = methodCache.computeIfAbsent(cacheKey, key -> {
+            for (String name : methodNames) {
+                try {
+                    return targetClass.getMethod(name);
+                } catch (NoSuchMethodException ignored) {
+                    // Пробуем следующее имя — разные версии Towny.
+                }
             }
+            return NO_METHOD;
+        });
+
+        if (resolved == NO_METHOD) return null;
+
+        try {
+            return resolved.invoke(target);
+        } catch (Throwable e) {
+            plugin.getLogger().log(Level.FINE, "Не удалось вызвать " + resolved.getName()
+                    + " на " + targetClass.getName(), e);
+            return null;
         }
-        return null;
     }
 
     private Player asPlayer(Object o) {
@@ -187,10 +229,19 @@ public final class TownyActionListener implements Listener {
         return null;
     }
 
+    /**
+     * Зона рейда — это ТОЛЬКО территория города-защитника.
+     * RaidManager индексирует рейд по обоим городам, поэтому обязательно
+     * проверяем, что найденный город действительно защищается, иначе город
+     * самих атакующих тоже становится зоной рейда.
+     */
     private Raid raidAt(Location loc) {
         Object town = towny.getTownAt(loc);
         if (town == null) return null;
-        return raids.getRaidByDefender(towny.townName(town));
+        String townName = towny.townName(town);
+        Raid raid = raids.getRaidByDefender(townName);
+        if (raid == null) return null;
+        return raid.defenderTownName.equalsIgnoreCase(townName) ? raid : null;
     }
 
     private boolean isInTown(Player player, String townName) {
